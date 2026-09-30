@@ -17,7 +17,7 @@ jobs:
 
     - name: "Setup GLPI plugin"
       id: "setup-glpi-plugin"
-      uses: "glpi-project/plugin-translation-workflows/.github/actions/setup-glpi-plugin@v1"
+      uses: "froozeify/GLPI_plugin-translation-workflows/.github/actions/setup-glpi-plugin@demo-switch-core"
 
     - name: "Extract locales"
       working-directory: /var/www/glpi/
