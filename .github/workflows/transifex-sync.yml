@@ -2,11 +2,28 @@ name: "Transifex sync"
 
 on:
   workflow_call:
+    inputs:
+      # GitHub App client ID. Used when `bot-token` is not given.
+      # Defaults to the `GLPI_PROJECT_BOT_CLIENT_ID` variable.
+      bot-client-id:
+        required: false
+        type: string
+        default: ""
     secrets:
       transifex-token:
         required: true
+      # A ready-made token (PAT or GitHub App token), used as is.
+      bot-token:
+        required: false
+      # Private key of the `bot-client-id` GitHub App.
+      bot-private-key:
+        required: false
+      # Deprecated: alias of `bot-token`.
       github-token:
-        required: true
+        required: false
+      # Org-wide fallback of `bot-private-key`
+      GLPI_PROJECT_BOT_PRIVATE_KEY:
+        required: false
 
 jobs:
   transifex-sync:
@@ -16,6 +33,28 @@ jobs:
       image: "ghcr.io/glpi-project/githubactions-glpi-apache:latest"
       options: --user 1001 # using built-in image user, otherwise GitHub Actions can't write file to the container
     steps:
+
+    - name: "Resolve token"
+      shell: "bash"
+      env:
+        HAS_BOT_TOKEN: ${{ secrets.bot-token != '' || secrets.github-token != '' }}
+        INPUT_BOT_CLIENT_ID: ${{ inputs.bot-client-id }}
+        BOT_CLIENT_ID: ${{ inputs.bot-client-id || vars.GLPI_PROJECT_BOT_CLIENT_ID }}
+        HAS_BOT_PRIVATE_KEY: ${{ secrets.bot-private-key != '' || secrets.GLPI_PROJECT_BOT_PRIVATE_KEY != '' }}
+      run: |
+        USE_BOT_APP=no
+        if [[ "${HAS_BOT_TOKEN}" != "true" ]]; then
+          if [[ -n "${BOT_CLIENT_ID}" && "${HAS_BOT_PRIVATE_KEY}" == "true" ]]; then
+            USE_BOT_APP=yes
+          elif [[ -n "${INPUT_BOT_CLIENT_ID}" ]]; then
+            echo "::error::The bot-private-key secret is required when bot-client-id is set."
+            exit 1
+          else
+            echo "::error::Either the bot-token secret, or the bot-client-id input and the bot-private-key secret (or the GLPI_PROJECT_BOT_CLIENT_ID variable and the GLPI_PROJECT_BOT_PRIVATE_KEY secret), are required."
+            exit 1
+          fi
+        fi
+        echo "USE_BOT_APP=${USE_BOT_APP}" >> "$GITHUB_ENV"
 
     - name: "Setup GLPI plugin"
       id: "setup-glpi-plugin"
@@ -58,6 +97,16 @@ jobs:
           echo "CREATE_PR=no" >> $GITHUB_OUTPUT
         fi
 
+    - name: "Generate bot token"
+      if: ${{ steps.check-status.outputs.CREATE_PR == 'yes' && env.USE_BOT_APP == 'yes' }}
+      id: "bot-app-token"
+      uses: "actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510" # v3.3.0
+      with:
+        client-id: ${{ inputs.bot-client-id || vars.GLPI_PROJECT_BOT_CLIENT_ID }}
+        private-key: ${{ secrets.bot-private-key || secrets.GLPI_PROJECT_BOT_PRIVATE_KEY }}
+        permission-contents: "write"
+        permission-pull-requests: "write"
+
     - name: "Create pull request"
       if: ${{ steps.check-status.outputs.CREATE_PR == 'yes' }}
       uses: "peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1" # v8.1.1
@@ -70,11 +119,11 @@ jobs:
         delete-branch: true
         title: "Chore(i18n): update translations"
         body: "Auto-updated translations files"
-        # A PAT is required.
+        # A PAT or a GitHub App token is required.
         # From https://docs.github.com/en/actions/using-workflows/triggering-a-workflow#triggering-a-workflow-from-a-workflow:
         # > When you use the repository's GITHUB_TOKEN to perform tasks, events triggered by the GITHUB_TOKEN,
         # > with the exception of workflow_dispatch and repository_dispatch, will not create a new workflow run.
         # > This prevents you from accidentally creating recursive workflow runs. For example, if a workflow run pushes
         # > code using the repository's GITHUB_TOKEN, a new workflow will not run even when the repository
         # > contains a workflow configured to run when push events occur.
-        token: ${{ secrets.github-token }}
+        token: ${{ secrets.bot-token || secrets.github-token || steps.bot-app-token.outputs.token }}
