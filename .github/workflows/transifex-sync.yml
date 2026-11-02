@@ -4,7 +4,6 @@ on:
   workflow_call:
     inputs:
       # GitHub App client ID. Used when `bot-token` is not given.
-      # Defaults to the `GLPI_PROJECT_BOT_CLIENT_ID` variable.
       bot-client-id:
         required: false
         type: string
@@ -21,9 +20,6 @@ on:
       # Deprecated: alias of `bot-token`.
       github-token:
         required: false
-      # Org-wide fallback of `bot-private-key`
-      GLPI_PROJECT_BOT_PRIVATE_KEY:
-        required: false
 
 jobs:
   transifex-sync:
@@ -38,19 +34,19 @@ jobs:
       shell: "bash"
       env:
         HAS_BOT_TOKEN: ${{ secrets.bot-token != '' || secrets.github-token != '' }}
-        INPUT_BOT_CLIENT_ID: ${{ inputs.bot-client-id }}
-        BOT_CLIENT_ID: ${{ inputs.bot-client-id || vars.GLPI_PROJECT_BOT_CLIENT_ID }}
-        HAS_BOT_PRIVATE_KEY: ${{ secrets.bot-private-key != '' || secrets.GLPI_PROJECT_BOT_PRIVATE_KEY != '' }}
+        BOT_CLIENT_ID: ${{ inputs.bot-client-id }}
+        HAS_BOT_PRIVATE_KEY: ${{ secrets.bot-private-key != '' }}
       run: |
         USE_BOT_APP=no
+        if [[ -n "${BOT_CLIENT_ID}" && "${HAS_BOT_PRIVATE_KEY}" != "true" ]]; then
+          echo "::error::The bot-private-key secret is required when bot-client-id is set."
+          exit 1
+        fi
         if [[ "${HAS_BOT_TOKEN}" != "true" ]]; then
-          if [[ -n "${BOT_CLIENT_ID}" && "${HAS_BOT_PRIVATE_KEY}" == "true" ]]; then
+          if [[ -n "${BOT_CLIENT_ID}" ]]; then
             USE_BOT_APP=yes
-          elif [[ -n "${INPUT_BOT_CLIENT_ID}" ]]; then
-            echo "::error::The bot-private-key secret is required when bot-client-id is set."
-            exit 1
           else
-            echo "::error::Either the bot-token secret, or the bot-client-id input and the bot-private-key secret (or the GLPI_PROJECT_BOT_CLIENT_ID variable and the GLPI_PROJECT_BOT_PRIVATE_KEY secret), are required."
+            echo "::error::Either the bot-token secret, or the bot-client-id input and the bot-private-key secret, are required."
             exit 1
           fi
         fi
@@ -102,8 +98,8 @@ jobs:
       id: "bot-app-token"
       uses: "actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510" # v3.3.0
       with:
-        client-id: ${{ inputs.bot-client-id || vars.GLPI_PROJECT_BOT_CLIENT_ID }}
-        private-key: ${{ secrets.bot-private-key || secrets.GLPI_PROJECT_BOT_PRIVATE_KEY }}
+        client-id: ${{ inputs.bot-client-id }}
+        private-key: ${{ secrets.bot-private-key }}
         permission-contents: "write"
         permission-pull-requests: "write"
 

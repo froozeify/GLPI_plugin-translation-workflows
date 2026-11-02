@@ -44,8 +44,10 @@ jobs:
   sync-with-transifex:
     name: "Sync with transifex"
     uses: "glpi-project/plugin-translation-workflows/.github/workflows/transifex-sync.yml@v1"
+    with:
+      bot-client-id: "${{ vars.GLPI_PROJECT_BOT_CLIENT_ID }}"
     secrets:
-      GLPI_PROJECT_BOT_PRIVATE_KEY: "${{ secrets.GLPI_PROJECT_BOT_PRIVATE_KEY }}"
+      bot-private-key: "${{ secrets.GLPI_PROJECT_BOT_PRIVATE_KEY }}"
       # The Transifex API token used to push sources and pull translations.
       transifex-token: "${{ secrets.TRANSIFEX_TOKEN }}"
 ```
@@ -54,7 +56,6 @@ A token other than the workflow `GITHUB_TOKEN` is required, otherwise the pull r
 The workflow accepts, in this order of precedence:
 
 1. `bot-token` secret: a token (PAT or GitHub App token) with the `Contents` and `Pull requests` read/write permissions, used as is.
-2. `bot-client-id` input and `bot-private-key` secret. Used by a GitHub App with the `contents: write` and `pull-requests: write` permissions.  
-    They default to the `GLPI_PROJECT_BOT_CLIENT_ID` variable and the `GLPI_PROJECT_BOT_PRIVATE_KEY` secret, which must be passed by name.
+2. `bot-client-id` input and `bot-private-key` secret. Used by a GitHub App with the `contents: write` and `pull-requests: write` permissions.
 
 `github-token` is a deprecated alias of `bot-token`, used when `bot-token` is not set.
